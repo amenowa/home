@@ -399,7 +399,7 @@ document.getElementById('lgIn').addEventListener('click',async()=>{
 document.getElementById('lgUp').addEventListener('click',async()=>{
   const email=document.getElementById('lgEmail').value.trim(), pass=document.getElementById('lgPass').value; const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent='';
   if(!email||pass.length<6){ m.textContent='メールと6文字以上のパスワードを入れてください'; return; }
-  const {data,error}=await sb.auth.signUp({email,password:pass});
+  const {data,error}=await sb.auth.signUp({email,password:pass,options:{emailRedirectTo:location.origin+location.pathname}});
   if(error){ m.textContent=error.message; return; }
   if(data.session){ m.className='msg ok'; m.textContent='作成しました'; }
   else { m.className='msg ok'; m.textContent='確認メールを送りました。メール内のリンクを開いてから、ログインしてください'; }
