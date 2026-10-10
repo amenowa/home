@@ -270,7 +270,7 @@ canvas#confetti{position:fixed; inset:0; pointer-events:none; z-index:9}
         <h3>この1しゅうかん</h3>
         <div class="days" id="days"></div>
       </div>
-      <div class="small" style="text-align:center;margin-top:16px;opacity:.6">v14</div>
+      <div class="small" style="text-align:center;margin-top:16px;opacity:.6">v15</div>
     </div>
 
     <div id="giftView" style="display:none">
@@ -412,6 +412,14 @@ async function cloudLoad(){
     const d=payload.new&&payload.new.data; if(d && (d.updatedAt||0)>(store.updatedAt||0)){ useRemote(d); render(); if(document.body.classList.contains('pmode')){ const a=document.querySelector('.pnav button.active'); if(a) a.click(); } }
   }).subscribe();
 }
+async function cloudRefresh(){
+  if(!sb||!sbUser) return;
+  try{ const {data}=await sb.from('household_state').select('data').eq('user_id',sbUser.id).maybeSingle();
+    const d=data&&data.data; if(d && (d.updatedAt||0)>(store.updatedAt||0)){ useRemote(d); render(); if(document.body.classList.contains('pmode')){ const a=document.querySelector('.pnav button.active'); if(a) a.click(); } } setCloud('ok'); }catch(e){ console.warn(e); }
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') cloudRefresh(); });
+window.addEventListener('focus',cloudRefresh);
+setInterval(cloudRefresh, 30000);
 function showLogin(v){ document.getElementById('login').classList.toggle('show',v); }
 async function authInit(){
   if(!sb){ return; }
