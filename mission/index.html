@@ -300,8 +300,12 @@ canvas#confetti{position:fixed; inset:0; pointer-events:none; z-index:9}
       <div class="card" style="margin-top:20px">
         <h3>過去の日をまとめて加算</h3>
         <div class="note">チェック漏れや消えた日の分を、その日のミッション全部「やった・承認済み」にしてポイントを入れます（今選んでいる子どもに対して）。</div>
-        <input type="date" id="fillDate" style="width:100%; border:0; border-radius:14px; background:var(--field); color:var(--ink); padding:12px; font:inherit; font-size:18px; font-weight:800; margin-bottom:10px">
-        <button class="allbtn" id="fillDay" style="margin:0">この日を全部承認して加算</button>
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;margin-bottom:10px">
+          <input type="date" id="fillDate" style="width:100%; border:0; border-radius:14px; background:var(--field); color:var(--ink); padding:12px; font:inherit; font-size:16px; font-weight:800">
+          <span style="color:var(--muted)">〜</span>
+          <input type="date" id="fillDateTo" style="width:100%; border:0; border-radius:14px; background:var(--field); color:var(--ink); padding:12px; font:inherit; font-size:16px; font-weight:800">
+        </div>
+        <button class="allbtn" id="fillDay" style="margin:0">この期間を全部承認して加算</button>
       </div>
     </div>
 
@@ -566,14 +570,15 @@ function renderApprove(){
   $('#approveAll').style.display = ps.some(x=>x.k===todayKey()) ? '' : 'none';
 }
 $('#fillDay').addEventListener('click',async()=>{
-  const v=$('#fillDate').value; if(!v){ await alertD('日付を選んでください'); return; }
-  const ms=getMissions(); const all=[...ms.am,...ms.pm]; const d=dayData(v);
-  const todo=all.filter(m=>!d.ok[m.id]);
-  if(!todo.length){ await alertD('この日はすでに全部承認済みです'); return; }
-  const [y,mo,da]=v.split('-');
-  if(!await confirmD(`${kid().name}の ${+mo}/${+da} のミッション ${todo.length}個を承認して +${todo.length*PT}pt 入れますか？`)) return;
-  todo.forEach(m=>{ d.done[m.id]=true; d.ok[m.id]=true; addLog('earn', `${m.em} ${m.t}（${+mo}/${+da}）`, PT); });
-  save(); render(); renderApprove(); await alertD(`+${todo.length*PT}pt 入れました（合計 ${pts()}pt）`);
+  const v=$('#fillDate').value, v2=$('#fillDateTo').value||v; if(!v){ await alertD('日付を選んでください'); return; }
+  const ms=getMissions(); const all=[...ms.am,...ms.pm];
+  const days=[]; for(let d=new Date(v+'T00:00:00'); todayKey(d)<=v2 && days.length<62; d.setDate(d.getDate()+1)) days.push(todayKey(d));
+  let n=0; days.forEach(k=>{ const d=dayData(k); n+=all.filter(m=>!d.ok[m.id]).length; });
+  if(!n){ await alertD('この期間はすでに全部承認済みです'); return; }
+  const f=k=>{ const [y,mo,da]=k.split('-'); return `${+mo}/${+da}`; };
+  if(!await confirmD(`${kid().name}の ${f(days[0])}〜${f(days[days.length-1])}（${days.length}日分）のミッション ${n}個を承認して +${n*PT}pt 入れますか？`)) return;
+  days.forEach(k=>{ const d=dayData(k); all.filter(m=>!d.ok[m.id]).forEach(m=>{ d.done[m.id]=true; d.ok[m.id]=true; addLog('earn', `${m.em} ${m.t}（${f(k)}）`, PT); }); });
+  save(); render(); renderApprove(); await alertD(`+${n*PT}pt 入れました（合計 ${pts()}pt）`);
 });
 $('#approveAll').addEventListener('click',()=>{ pending().filter(x=>x.k===todayKey()).forEach(x=>approve(x.k,x.m)); renderApprove(); });
 
@@ -653,7 +658,7 @@ document.querySelectorAll('.pnav button').forEach(b=>b.addEventListener('click',
 $('#gear').addEventListener('click',async()=>{
   if(!await askPin(store.pin ? 'おうちの人の暗証番号' : '暗証番号（はじめは 1234）')) return;
   document.body.classList.add('pmode'); editPart = part==='gift'?'pm':part; emoOpenIdx=-1;
-  const yd=new Date(); yd.setDate(yd.getDate()-1); $('#fillDate').value=todayKey(yd);
+  const yd=new Date(); yd.setDate(yd.getDate()-1); $('#fillDate').value=todayKey(yd); $('#fillDateTo').value=todayKey(yd);
   document.querySelector('.pnav button[data-p="approve"]').click();
 });
 $('#logout').addEventListener('click',async()=>{ if(await confirmD('ログアウトしますか？（データはクラウドに残ります）')){ await sb.auth.signOut(); try{ localStorage.removeItem(KEY); }catch(e){} location.reload(); } });
