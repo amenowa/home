@@ -361,6 +361,7 @@ const SB_URL='https://ffzdcylxcvinwydggfgt.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmemRjeWx4Y3Zpbnd5ZGdnZmd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1NTUwNjksImV4cCI6MjEwNzEzMTA2OX0.vBOzaNGue4vnMphVI5bpQM_pkouYm4ciPOW_-QAAtD8';
 let sb=null, sbUser=null, cloudTimer=null, cloudChain=Promise.resolve(), lastRemoteAt=0;
 try{ sb = window.supabase.createClient(SB_URL, SB_KEY); }catch(e){ console.warn('supabase init failed', e); }
+window.addEventListener('load',()=>{ if(!sb){ const m=document.getElementById('lgMsg'); if(m) m.textContent='通信ライブラリを読み込めませんでした。ネットワーク制限（フィルタ等）で cdn.jsdelivr.net がブロックされていないか確認してください'; } });
 function setCloud(st){ const el=document.getElementById('cloud'); if(!el) return; el.style.display=''; el.textContent = st==='ok'?'☁️':st==='err'?'⚠️':'☁️…'; el.title = st==='ok'?'クラウドに保存されています':st==='err'?'クラウド保存に失敗':'同期中'; }
 function cloudSave(){
   if(!sb||!sbUser) return; clearTimeout(cloudTimer); setCloud('busy');
@@ -392,17 +393,22 @@ async function authInit(){
   sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==='SIGNED_IN'&&sess&&!sbUser){ sbUser=sess.user; showLogin(false); cloudLoad(); } if(ev==='SIGNED_OUT'){ sbUser=null; showLogin(true); } });
 }
 document.getElementById('lgIn').addEventListener('click',async()=>{
-  const email=document.getElementById('lgEmail').value.trim(), pass=document.getElementById('lgPass').value; const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent='';
-  const {error}=await sb.auth.signInWithPassword({email,password:pass});
-  if(error){ m.textContent = /Invalid/.test(error.message)?'メールまたはパスワードが違います':/confirm/i.test(error.message)?'メールの確認が終わっていません':error.message; }
+  const email=document.getElementById('lgEmail').value.trim(), pass=document.getElementById('lgPass').value; const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent='…';
+  try{ if(!sb) throw new Error('通信ライブラリ未読込');
+    const {error}=await sb.auth.signInWithPassword({email,password:pass});
+    if(error){ m.textContent = /Invalid/.test(error.message)?'メールまたはパスワードが違います':/confirm/i.test(error.message)?'メールの確認が終わっていません':error.message; } else m.textContent='';
+  }catch(e){ m.textContent='エラー: '+(e.message||e); }
 });
 document.getElementById('lgUp').addEventListener('click',async()=>{
   const email=document.getElementById('lgEmail').value.trim(), pass=document.getElementById('lgPass').value; const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent='';
   if(!email||pass.length<6){ m.textContent='メールと6文字以上のパスワードを入れてください'; return; }
-  const {data,error}=await sb.auth.signUp({email,password:pass,options:{emailRedirectTo:location.origin+location.pathname}});
-  if(error){ m.textContent=error.message; return; }
-  if(data.session){ m.className='msg ok'; m.textContent='作成しました'; }
-  else { m.className='msg ok'; m.textContent='確認メールを送りました。メール内のリンクを開いてから、ログインしてください'; }
+  m.textContent='…';
+  try{ if(!sb) throw new Error('通信ライブラリ未読込');
+    const {data,error}=await sb.auth.signUp({email,password:pass,options:{emailRedirectTo:location.origin+location.pathname}});
+    if(error){ m.textContent='エラー: '+error.message; return; }
+    if(data.session){ m.className='msg ok'; m.textContent='作成しました'; }
+    else { m.className='msg ok'; m.textContent='確認メールを送りました。メール内のリンクを開いてから、ログインしてください'; }
+  }catch(e){ m.textContent='エラー: '+(e.message||e); }
 });
 authInit();
 
