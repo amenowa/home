@@ -455,7 +455,7 @@ function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 function fmtDate(ts){ const d=new Date(ts); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
 
 function renderKids(){
-  const box=$('#kids'); box.innerHTML='';
+  const box=$('#kids'); box.innerHTML=''; box.style.display = store.kids.length>1 ? '' : 'none';
   store.kids.forEach(k=>{ const b=document.createElement('button'); b.className=(k.id===store.cur?'active':''); b.innerHTML=`<span class="em">${k.em}</span>${esc(k.name)}`;
     b.addEventListener('click',()=>{ store.cur=k.id; pickerOpen=false; emoOpenIdx=-1; emoOpenGift=-1; save(); render(); if(document.body.classList.contains('pmode')) document.querySelector('.pnav button.active').click(); }); box.appendChild(b); });
 }
