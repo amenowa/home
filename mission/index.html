@@ -204,11 +204,26 @@ canvas#confetti{position:fixed; inset:0; pointer-events:none; z-index:9}
 <div class="login" id="login"><div class="box">
   <div style="text-align:center;font-size:64px">⭐</div>
   <h2>きょうのミッション</h2>
-  <p>おうちのアカウントでログイン。家族みんな同じメールとパスワードで入ります。</p>
-  <input id="lgEmail" type="email" placeholder="メールアドレス" autocomplete="email">
-  <input id="lgPass" type="password" placeholder="パスワード（6文字以上）" autocomplete="current-password">
-  <button class="pri" id="lgIn">ログイン</button>
-  <button class="sec" id="lgUp">はじめて使う（アカウント作成）</button>
+  <div id="lgChoose">
+    <p>おうちのアカウントで使います。家族みんな同じメールとパスワードでログインします。</p>
+    <button class="pri" id="goUp">はじめて使う（アカウントを作る）</button>
+    <button class="sec" id="goIn">アカウントがある（ログイン）</button>
+  </div>
+  <div id="lgUpForm" style="display:none">
+    <p>家族で共有するメールとパスワードを決めてください</p>
+    <input id="upEmail" type="email" placeholder="メールアドレス" autocomplete="email">
+    <input id="upPass" type="password" placeholder="パスワード（6文字以上）" autocomplete="new-password">
+    <input id="upPass2" type="password" placeholder="パスワード（もう一度）" autocomplete="new-password">
+    <button class="pri" id="lgUp">アカウントを作る</button>
+    <button class="sec" id="backUp">もどる</button>
+  </div>
+  <div id="lgInForm" style="display:none">
+    <p>家族のメールとパスワードを入れてください</p>
+    <input id="lgEmail" type="email" placeholder="メールアドレス" autocomplete="email">
+    <input id="lgPass" type="password" placeholder="パスワード" autocomplete="current-password">
+    <button class="pri" id="lgIn">ログイン</button>
+    <button class="sec" id="backIn">もどる</button>
+  </div>
   <div class="msg" id="lgMsg"></div>
 </div></div>
 <div class="modal" id="modal"><div class="mbox">
@@ -399,15 +414,23 @@ document.getElementById('lgIn').addEventListener('click',async()=>{
     if(error){ m.textContent = /Invalid/.test(error.message)?'メールまたはパスワードが違います':/confirm/i.test(error.message)?'メールの確認が終わっていません':error.message; } else m.textContent='';
   }catch(e){ m.textContent='エラー: '+(e.message||e); }
 });
+function lgView(v){ ['lgChoose','lgUpForm','lgInForm'].forEach(id=>document.getElementById(id).style.display = id===v?'':'none'); const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent=''; }
+document.getElementById('goUp').addEventListener('click',()=>lgView('lgUpForm'));
+document.getElementById('goIn').addEventListener('click',()=>lgView('lgInForm'));
+document.getElementById('backUp').addEventListener('click',()=>lgView('lgChoose'));
+document.getElementById('backIn').addEventListener('click',()=>lgView('lgChoose'));
 document.getElementById('lgUp').addEventListener('click',async()=>{
-  const email=document.getElementById('lgEmail').value.trim(), pass=document.getElementById('lgPass').value; const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent='';
-  if(!email||pass.length<6){ m.textContent='メールと6文字以上のパスワードを入れてください'; return; }
+  const email=document.getElementById('upEmail').value.trim(), pass=document.getElementById('upPass').value, pass2=document.getElementById('upPass2').value; const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent='';
+  if(!email){ m.textContent='メールアドレスを入れてください'; return; }
+  if(pass.length<6){ m.textContent='パスワードは6文字以上にしてください'; return; }
+  if(pass!==pass2){ m.textContent='パスワードが一致しません'; return; }
   m.textContent='…';
   try{ if(!sb) throw new Error('通信ライブラリ未読込');
     const {data,error}=await sb.auth.signUp({email,password:pass,options:{emailRedirectTo:location.origin+location.pathname}});
     if(error){ m.textContent='エラー: '+error.message; return; }
     if(data.session){ m.className='msg ok'; m.textContent='作成しました'; }
-    else { m.className='msg ok'; m.textContent='確認メールを送りました。メール内のリンクを開いてから、ログインしてください'; }
+    else if(data.user && data.user.identities && data.user.identities.length===0){ m.textContent='このメールはすでに登録されています。「ログイン」から入ってください'; }
+    else { m.className='msg ok'; m.textContent='確認メールを送りました。メール内のリンクを開いたら、「もどる」→「ログイン」から入ってください'; }
   }catch(e){ m.textContent='エラー: '+(e.message||e); }
 });
 authInit();
