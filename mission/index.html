@@ -270,7 +270,7 @@ canvas#confetti{position:fixed; inset:0; pointer-events:none; z-index:9}
         <h3>この1しゅうかん</h3>
         <div class="days" id="days"></div>
       </div>
-      <div class="small" style="text-align:center;margin-top:16px;opacity:.6">v12</div>
+      <div class="small" style="text-align:center;margin-top:16px;opacity:.6">v13</div>
     </div>
 
     <div id="giftView" style="display:none">
@@ -342,6 +342,7 @@ canvas#confetti{position:fixed; inset:0; pointer-events:none; z-index:9}
 </div>
 
 <script>
+window.addEventListener('error',e=>{ try{ let b=document.getElementById('errbar'); if(!b){ b=document.createElement('div'); b.id='errbar'; b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99;background:#FF6B8A;color:#fff;font-size:13px;padding:8px 12px;white-space:pre-wrap;user-select:text;-webkit-user-select:text'; document.body.appendChild(b); } b.textContent='エラー: '+(e.message||e)+(e.lineno?' (行'+e.lineno+')':''); }catch(_){} });
 const DEFAULTS = {
   am: [
     {id:'face',  em:'💦', t:'かおを あらう'},
