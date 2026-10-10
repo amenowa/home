@@ -270,7 +270,7 @@ canvas#confetti{position:fixed; inset:0; pointer-events:none; z-index:9}
         <h3>この1しゅうかん</h3>
         <div class="days" id="days"></div>
       </div>
-      <div class="small" style="text-align:center;margin-top:16px;opacity:.6">v16</div>
+      <div class="small" style="text-align:center;margin-top:16px;opacity:.6">v17</div>
     </div>
 
     <div id="giftView" style="display:none">
@@ -375,88 +375,9 @@ const KEY = 'missions:v1'; const PT = 1;
 
 function todayKey(d=new Date()){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 let store = {};
+let sb=null, sbUser=null, cloudTimer=null, cloudChain=Promise.resolve(), lastRemoteStamp=null, dirty=false, cloudReady=false, rtChannel=null;
 try{ store = JSON.parse(localStorage.getItem(KEY)||'{}')||{}; }catch(e){ store = {}; }
 function save(){ store.updatedAt=Date.now(); try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} cloudSave(); }
-/* ---- cloud sync (Supabase) ---- */
-const SB_URL='https://ffzdcylxcvinwydggfgt.supabase.co';
-const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmemRjeWx4Y3Zpbnd5ZGdnZmd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1NTUwNjksImV4cCI6MjEwNzEzMTA2OX0.vBOzaNGue4vnMphVI5bpQM_pkouYm4ciPOW_-QAAtD8';
-let sb=null, sbUser=null, cloudTimer=null, cloudChain=Promise.resolve(), lastRemoteAt=0;
-try{ sb = window.supabase.createClient(SB_URL, SB_KEY); }catch(e){ console.warn('supabase init failed', e); }
-window.addEventListener('load',()=>{ if(!sb){ const m=document.getElementById('lgMsg'); if(m) m.textContent='通信ライブラリを読み込めませんでした。ネットワーク制限（フィルタ等）で cdn.jsdelivr.net がブロックされていないか確認してください'; } });
-function setCloud(st){ const el=document.getElementById('cloud'); if(!el) return; el.style.display=''; el.textContent = st==='ok'?'☁️':st==='err'?'⚠️':'☁️…'; el.title = st==='ok'?'クラウドに保存されています':st==='err'?'クラウド保存に失敗':'同期中'; }
-function cloudSave(){
-  if(!sb||!sbUser) return; clearTimeout(cloudTimer); setCloud('busy');
-  cloudTimer=setTimeout(()=>{ if(!store||!Array.isArray(store.kids)||!store.kids.length){ setCloud('err'); return; } const body=JSON.parse(JSON.stringify(store)); const at=body.updatedAt||Date.now();
-    cloudChain=cloudChain.then(()=>sb.from('household_state').upsert({user_id:sbUser.id, data:body, updated_at:new Date(at).toISOString()}))
-      .then(r=>{ if(r&&r.error) throw r.error; lastRemoteAt=at; setCloud('ok'); }).catch(e=>{ console.warn('cloud save failed',e); setCloud('err'); }); },600);
-}
-function isEmptyStore(st){ return !st || !st.kids || !st.k || Object.values(st.k).every(d=>!d.points && !(d.log||[]).length && !Object.keys(d.days||{}).length); }
-function hasHistory(st){ return !!(st&&st.k&&Object.values(st.k).some(d=>(d.log||[]).length)); }
-function totalPts(st){ return st&&st.k ? Object.values(st.k).reduce((a,d)=>a+(d.points||0),0) : 0; }
-function useRemote(remote){ store=normalize(JSON.parse(JSON.stringify(remote))); try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} lastRemoteAt=remote.updatedAt||0; }
-async function cloudLoad(){
-  const {data,error}=await sb.from('household_state').select('data').eq('user_id',sbUser.id).maybeSingle();
-  if(error){ console.warn(error); setCloud('err'); return; }
-  const remote = data && data.data;
-  if(remote && !isEmptyStore(remote)){
-    if(isEmptyStore(store) || !hasHistory(store) || JSON.stringify(store)===JSON.stringify(remote)){ useRemote(remote); }
-    else if(!hasHistory(remote)){ cloudSave(); }
-    else {
-      // both sides have data: ask which to keep (never overwrite silently)
-      const keepLocal = await dialog(`クラウドにデータがあります（合計 ${totalPts(remote)}pt）。この端末にも別のデータ（合計 ${totalPts(store)}pt）があります。どちらを使いますか？`,{type:'confirm',ok:'この端末のデータ',no:'クラウドのデータ'});
-      if(keepLocal){ cloudSave(); } else { useRemote(remote); }
-    }
-  } else if(!isEmptyStore(store)){ cloudSave(); }
-  else if(remote){ useRemote(remote); }
-  else { cloudSave(); }
-  setCloud('ok'); render();
-  sb.channel('hs').on('postgres_changes',{event:'*',schema:'public',table:'household_state',filter:'user_id=eq.'+sbUser.id},payload=>{
-    const d=payload.new&&payload.new.data; if(d && (d.updatedAt||0)>(store.updatedAt||0)){ useRemote(d); render(); if(document.body.classList.contains('pmode')){ const a=document.querySelector('.pnav button.active'); if(a) a.click(); } }
-  }).subscribe();
-}
-async function cloudRefresh(){
-  if(!sb||!sbUser) return;
-  try{ const {data}=await sb.from('household_state').select('data').eq('user_id',sbUser.id).maybeSingle();
-    const d=data&&data.data; if(d && (d.updatedAt||0)>(store.updatedAt||0)){ useRemote(d); render(); if(document.body.classList.contains('pmode')){ const a=document.querySelector('.pnav button.active'); if(a) a.click(); } } setCloud('ok'); }catch(e){ console.warn(e); }
-}
-document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') cloudRefresh(); });
-window.addEventListener('focus',cloudRefresh);
-setInterval(cloudRefresh, 30000);
-function showLogin(v){ document.getElementById('login').classList.toggle('show',v); }
-async function authInit(){
-  if(!sb){ return; }
-  const {data:{session}}=await sb.auth.getSession();
-  if(session){ sbUser=session.user; showLogin(false); cloudLoad(); } else { showLogin(true); }
-  sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==='SIGNED_IN'&&sess&&!sbUser){ sbUser=sess.user; showLogin(false); cloudLoad(); } if(ev==='SIGNED_OUT'){ sbUser=null; showLogin(true); } });
-}
-document.getElementById('lgIn').addEventListener('click',async()=>{
-  const email=document.getElementById('lgEmail').value.trim(), pass=document.getElementById('lgPass').value; const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent='…';
-  try{ if(!sb) throw new Error('通信ライブラリ未読込');
-    const {error}=await sb.auth.signInWithPassword({email,password:pass});
-    if(error){ m.textContent = /Invalid/.test(error.message)?'メールまたはパスワードが違います':/confirm/i.test(error.message)?'メールの確認が終わっていません':error.message; } else m.textContent='';
-  }catch(e){ m.textContent='エラー: '+(e.message||e); }
-});
-function lgView(v){ ['lgChoose','lgUpForm','lgInForm'].forEach(id=>document.getElementById(id).style.display = id===v?'':'none'); const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent=''; }
-document.getElementById('goUp').addEventListener('click',()=>lgView('lgUpForm'));
-document.getElementById('goIn').addEventListener('click',()=>lgView('lgInForm'));
-document.getElementById('backUp').addEventListener('click',()=>lgView('lgChoose'));
-document.getElementById('backIn').addEventListener('click',()=>lgView('lgChoose'));
-document.getElementById('lgUp').addEventListener('click',async()=>{
-  const email=document.getElementById('upEmail').value.trim(), pass=document.getElementById('upPass').value, pass2=document.getElementById('upPass2').value; const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent='';
-  if(!email){ m.textContent='メールアドレスを入れてください'; return; }
-  if(pass.length<6){ m.textContent='パスワードは6文字以上にしてください'; return; }
-  if(pass!==pass2){ m.textContent='パスワードが一致しません'; return; }
-  m.textContent='…';
-  try{ if(!sb) throw new Error('通信ライブラリ未読込');
-    const {data,error}=await sb.auth.signUp({email,password:pass,options:{emailRedirectTo:location.origin+location.pathname}});
-    if(error){ m.textContent='エラー: '+error.message; return; }
-    if(data.session){ m.className='msg ok'; m.textContent='作成しました'; }
-    else if(data.user && data.user.identities && data.user.identities.length===0){ m.textContent='このメールはすでに登録されています。「ログイン」から入ってください'; }
-    else { m.className='msg ok'; m.textContent='確認メールを送りました。メール内のリンクを開いたら、「もどる」→「ログイン」から入ってください'; }
-  }catch(e){ m.textContent='エラー: '+(e.message||e); }
-});
-authInit();
-
 /* one-time: convert past +2pt approvals to +1pt */
 (function(){ if(store.mig1) return; let diff=0; (store.log||[]).forEach(e=>{ if(e.type==='earn' && e.p===2){ e.p=1; diff+=1; } }); if(diff){ store.points=(store.points||0)-diff; } store.mig1=true; save(); })();
 /* one-time: split into per-child profiles */
@@ -485,6 +406,117 @@ function getLog(){ const D=K(); if(!D.log) D.log=[]; return D.log; }
 function pts(){ return K().points||0; }
 function addLog(type, text, p){ getLog().unshift({ts:Date.now(), type, text, p}); if(getLog().length>300) getLog().length=300; K().points=pts()+p; save(); }
 function getPin(){ return store.pin||'1234'; }
+/* ---- cloud sync (Supabase) ----
+   Rules (multi-device):
+   - The cloud row is the source of truth once a device has loaded it.
+   - A device never uploads a "pristine" (untouched default) store over cloud data.
+   - Local edits set dirty=true and are uploaded (debounced). While dirty, incoming remote
+     snapshots are not applied (our upload lands shortly). After upload, dirty=false.
+   - Remote snapshots are applied whenever their stamp differs from the one we last saw
+     (no wall-clock comparison between devices).
+   - If both local and cloud contain real history and differ, ask the user once.
+*/
+const SB_URL='https://ffzdcylxcvinwydggfgt.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmemRjeWx4Y3Zpbnd5ZGdnZmd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1NTUwNjksImV4cCI6MjEwNzEzMTA2OX0.vBOzaNGue4vnMphVI5bpQM_pkouYm4ciPOW_-QAAtD8';
+try{ sb = window.supabase.createClient(SB_URL, SB_KEY); }catch(e){ console.warn('supabase init failed', e); }
+window.addEventListener('load',()=>{ if(!sb){ const m=document.getElementById('lgMsg'); if(m) m.textContent='通信ライブラリを読み込めませんでした。ネットワーク制限（フィルタ等）で cdn.jsdelivr.net がブロックされていないか確認してください'; } });
+function setCloud(st){ const el=document.getElementById('cloud'); if(!el) return; el.style.display=''; el.textContent = st==='ok'?'☁️':st==='err'?'⚠️':'☁️…'; el.title = st==='ok'?'クラウドに保存されています':st==='err'?'クラウド保存に失敗':'同期中'; }
+function stampOf(st){ return st && st.updatedAt ? String(st.updatedAt) : null; }
+function isPristine(st){
+  if(!st||!st.kids||!st.k) return true;
+  if(st.pin) return false;
+  if(st.kids.length!==1 || st.kids[0].name!=='こども') return false;
+  return Object.values(st.k).every(d=>!d.points && !(d.log||[]).length && !Object.keys(d.days||{}).length && !d.missions && !d.gifts);
+}
+function hasHistory(st){ return !!(st&&st.k&&Object.values(st.k).some(d=>(d.log||[]).length)); }
+function totalPts(st){ return st&&st.k ? Object.values(st.k).reduce((a,d)=>a+(d.points||0),0) : 0; }
+function sameData(a,b){ const strip=x=>{ const y=JSON.parse(JSON.stringify(x||{})); delete y.updatedAt; return JSON.stringify(y); }; return strip(a)===strip(b); }
+function useRemote(remote){ store=normalize(JSON.parse(JSON.stringify(remote))); try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} lastRemoteStamp=stampOf(store); dirty=false; }
+function applyRemoteIfNew(remote, why){
+  if(!remote) return false;
+  if(stampOf(remote)===lastRemoteStamp) return false;      // already seen
+  if(dirty) return false;                                  // our own change is about to be uploaded
+  useRemote(remote); render();
+  if(document.body.classList.contains('pmode')){ const a=document.querySelector('.pnav button.active'); if(a) a.click(); }
+  return true;
+}
+function cloudSave(){
+  if(!sb||!sbUser||!cloudReady) return; dirty=true; clearTimeout(cloudTimer); setCloud('busy');
+  cloudTimer=setTimeout(()=>{
+    if(!store||!Array.isArray(store.kids)||!store.kids.length){ setCloud('err'); return; }
+    const body=JSON.parse(JSON.stringify(store)); const at=body.updatedAt||Date.now();
+    cloudChain=cloudChain.then(()=>sb.from('household_state').upsert({user_id:sbUser.id, data:body, updated_at:new Date(at).toISOString()}))
+      .then(r=>{ if(r&&r.error) throw r.error; lastRemoteStamp=stampOf(body); if(stampOf(store)===stampOf(body)) dirty=false; setCloud('ok'); })
+      .catch(e=>{ console.warn('cloud save failed',e); setCloud('err'); });
+  },500);
+}
+async function fetchRemote(){ const {data,error}=await sb.from('household_state').select('data').eq('user_id',sbUser.id).maybeSingle(); if(error) throw error; return data && data.data; }
+async function cloudLoad(){
+  let remote=null;
+  try{ remote=await fetchRemote(); }catch(e){ console.warn(e); setCloud('err'); return; }
+  cloudReady=true;
+  const remoteReal = remote && !isPristine(remote);
+  const localReal  = !isPristine(store);
+  if(remoteReal && !localReal){ useRemote(remote); }
+  else if(remoteReal && localReal){
+    if(sameData(store,remote)){ useRemote(remote); }
+    else if(hasHistory(store) && hasHistory(remote)){
+      const keepLocal = await dialog(`クラウドにデータがあります（合計 ${totalPts(remote)}pt）。この端末にも別のデータ（合計 ${totalPts(store)}pt）があります。どちらを使いますか？`,{type:'confirm',ok:'この端末のデータ',no:'クラウドのデータ'});
+      if(keepLocal){ save(); } else { useRemote(remote); }
+    }
+    else if(hasHistory(remote)){ useRemote(remote); }        // cloud has real history, local has only edits
+    else { save(); }                                          // local has history, cloud only edits
+  }
+  else if(!remoteReal && localReal){ save(); }                // first device with data
+  else { if(remote) useRemote(remote); else save(); }         // both pristine
+  setCloud('ok'); render();
+  if(!rtChannel){
+    rtChannel=sb.channel('hs-'+sbUser.id).on('postgres_changes',{event:'*',schema:'public',table:'household_state',filter:'user_id=eq.'+sbUser.id},payload=>{
+      if(payload.new && payload.new.user_id===sbUser.id) applyRemoteIfNew(payload.new.data,'realtime');
+    }).subscribe();
+  }
+}
+async function cloudRefresh(){
+  if(!sb||!sbUser||!cloudReady||dirty) return;
+  try{ const remote=await fetchRemote(); applyRemoteIfNew(remote,'refresh'); setCloud('ok'); }catch(e){ console.warn(e); }
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') cloudRefresh(); });
+window.addEventListener('focus',cloudRefresh);
+setInterval(cloudRefresh, 30000);
+function showLogin(v){ document.getElementById('login').classList.toggle('show',v); }
+async function authInit(){
+  if(!sb){ return; }
+  const {data:{session}}=await sb.auth.getSession();
+  if(session){ sbUser=session.user; showLogin(false); cloudLoad(); } else { showLogin(true); }
+  sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==='SIGNED_IN'&&sess&&!sbUser){ sbUser=sess.user; showLogin(false); cloudLoad(); } if(ev==='SIGNED_OUT'){ sbUser=null; cloudReady=false; showLogin(true); } });
+}
+document.getElementById('lgIn').addEventListener('click',async()=>{
+  const email=document.getElementById('lgEmail').value.trim(), pass=document.getElementById('lgPass').value; const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent='…';
+  try{ if(!sb) throw new Error('通信ライブラリ未読込');
+    const {error}=await sb.auth.signInWithPassword({email,password:pass});
+    if(error){ m.textContent = /Invalid/.test(error.message)?'メールまたはパスワードが違います':/confirm/i.test(error.message)?'メールの確認が終わっていません':error.message; } else m.textContent='';
+  }catch(e){ m.textContent='エラー: '+(e.message||e); }
+});
+function lgView(v){ ['lgChoose','lgUpForm','lgInForm'].forEach(id=>document.getElementById(id).style.display = id===v?'':'none'); const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent=''; }
+document.getElementById('goUp').addEventListener('click',()=>lgView('lgUpForm'));
+document.getElementById('goIn').addEventListener('click',()=>lgView('lgInForm'));
+document.getElementById('backUp').addEventListener('click',()=>lgView('lgChoose'));
+document.getElementById('backIn').addEventListener('click',()=>lgView('lgChoose'));
+document.getElementById('lgUp').addEventListener('click',async()=>{
+  const email=document.getElementById('upEmail').value.trim(), pass=document.getElementById('upPass').value, pass2=document.getElementById('upPass2').value; const m=document.getElementById('lgMsg'); m.className='msg'; m.textContent='';
+  if(!email){ m.textContent='メールアドレスを入れてください'; return; }
+  if(pass.length<6){ m.textContent='パスワードは6文字以上にしてください'; return; }
+  if(pass!==pass2){ m.textContent='パスワードが一致しません'; return; }
+  m.textContent='…';
+  try{ if(!sb) throw new Error('通信ライブラリ未読込');
+    const {data,error}=await sb.auth.signUp({email,password:pass,options:{emailRedirectTo:location.origin+location.pathname}});
+    if(error){ m.textContent='エラー: '+error.message; return; }
+    if(data.session){ m.className='msg ok'; m.textContent='作成しました'; }
+    else if(data.user && data.user.identities && data.user.identities.length===0){ m.textContent='このメールはすでに登録されています。「ログイン」から入ってください'; }
+    else { m.className='msg ok'; m.textContent='確認メールを送りました。メール内のリンクを開いたら、「もどる」→「ログイン」から入ってください'; }
+  }catch(e){ m.textContent='エラー: '+(e.message||e); }
+});
+authInit();
 
 /* ---- in-page dialogs (prompt/alert/confirm are blocked in some embeds) ---- */
 const M={el:null};
@@ -719,7 +751,7 @@ $('#reset').addEventListener('click',async()=>{ if(await confirmD('ミッショ�
 $('#pin').addEventListener('click',async()=>{ const v=await dialog('新しい暗証番号（数字4〜8桁）',{type:'pin'}); if(v && /^\d{4,8}$/.test(v)){ store.pin=v; save(); await alertD('変更しました'); } else if(v!==null) await alertD('数字4〜8桁で入力してください'); });
 $('#bkOut').addEventListener('click',()=>{ const t=$('#bkText'); t.style.display=''; t.value=JSON.stringify(store); t.focus(); t.select(); try{ navigator.clipboard.writeText(t.value).then(()=>alertD('コピーしました。メモなどに貼り付けて保存してください')); }catch(e){} });
 $('#bkIn').addEventListener('click',async()=>{ const t=$('#bkText'); if(t.style.display==='none'||!t.value.trim()){ t.style.display=''; t.value=''; t.placeholder='ここに書き出したデータを貼り付けて、もう一度「読み込む」'; t.focus(); return; }
-  try{ const obj=JSON.parse(t.value); if(!obj.kids) throw 0; if(await confirmD('今のデータを上書きして読み込みますか？')){ store=obj; save(); render(); t.style.display='none'; await alertD('読み込みました'); } }catch(e){ await alertD('読み込めませんでした。書き出したデータをそのまま貼り付けてください'); } });
+  try{ const obj=JSON.parse(t.value); if(!obj.kids) throw 0; if(await confirmD('今のデータを上書きして読み込みますか？')){ store=normalize(obj); save(); render(); t.style.display='none'; await alertD('読み込みました'); } }catch(e){ await alertD('読み込めませんでした。書き出したデータをそのまま貼り付けてください'); } });
 $('#recalc').addEventListener('click',async()=>{ const sum=getLog().reduce((a,e)=>a+(e.p||0),0); const before=pts(); if(await confirmD(`履歴の合計は ${sum}pt（現在 ${before}pt）。合計に合わせますか？`)){ K().points=sum; save(); render(); await alertD(`${sum}pt にしました`); } });
 $('#adjust').addEventListener('click',async()=>{ const v=await dialog('加減するポイント（例: 5 / -3）',{type:'number',placeholder:'5 または -3'}); const n=parseInt(v); if(!isNaN(n)&&n!==0){ addLog('adjust', '✍️ おうちの人が ちょうせい', n); await alertD(`現在 ${pts()}pt`); } });
 document.querySelectorAll('.subtabs button').forEach(b=>b.addEventListener('click',()=>{ editPart=b.dataset.part; emoOpenIdx=-1; renderEdit(); }));
