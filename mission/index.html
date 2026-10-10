@@ -384,20 +384,26 @@ function cloudSave(){
     cloudChain=cloudChain.then(()=>sb.from('household_state').upsert({user_id:sbUser.id, data:body, updated_at:new Date(at).toISOString()}))
       .then(r=>{ if(r&&r.error) throw r.error; lastRemoteAt=at; setCloud('ok'); }).catch(e=>{ console.warn('cloud save failed',e); setCloud('err'); }); },600);
 }
-function applyRemote(remote){
-  if(!remote) return; const lt=store.updatedAt||0, rt=remote.updatedAt||0;
-  const localEmpty = !store.kids || !store.k || Object.values(store.k).every(d=>!d.points && !(d.log||[]).length && !Object.keys(d.days||{}).length);
-  if(rt>lt || localEmpty){ store=JSON.parse(JSON.stringify(remote)); try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} lastRemoteAt=rt; return true; }
-  return false;
-}
+function isEmptyStore(st){ return !st || !st.kids || !st.k || Object.values(st.k).every(d=>!d.points && !(d.log||[]).length && !Object.keys(d.days||{}).length); }
+function totalPts(st){ return st&&st.k ? Object.values(st.k).reduce((a,d)=>a+(d.points||0),0) : 0; }
+function useRemote(remote){ store=JSON.parse(JSON.stringify(remote)); try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} lastRemoteAt=remote.updatedAt||0; }
 async function cloudLoad(){
   const {data,error}=await sb.from('household_state').select('data').eq('user_id',sbUser.id).maybeSingle();
   if(error){ console.warn(error); setCloud('err'); return; }
-  if(data&&data.data){ if(!applyRemote(data.data) && (store.updatedAt||0)>(data.data.updatedAt||0)) cloudSave(); }
-  else cloudSave();
+  const remote = data && data.data;
+  if(remote && !isEmptyStore(remote)){
+    if(isEmptyStore(store) || JSON.stringify(store)===JSON.stringify(remote)){ useRemote(remote); }
+    else {
+      // both sides have data: ask which to keep (never overwrite silently)
+      const keepLocal = await dialog(`クラウドにデータがあります（合計 ${totalPts(remote)}pt）。この端末にも別のデータ（合計 ${totalPts(store)}pt）があります。どちらを使いますか？`,{type:'confirm',ok:'この端末のデータ',no:'クラウドのデータ'});
+      if(keepLocal){ cloudSave(); } else { useRemote(remote); }
+    }
+  } else if(!isEmptyStore(store)){ cloudSave(); }
+  else if(remote){ useRemote(remote); }
+  else { cloudSave(); }
   setCloud('ok'); render();
   sb.channel('hs').on('postgres_changes',{event:'*',schema:'public',table:'household_state',filter:'user_id=eq.'+sbUser.id},payload=>{
-    const d=payload.new&&payload.new.data; if(d && (d.updatedAt||0)>(store.updatedAt||0)){ applyRemote(d); render(); if(document.body.classList.contains('pmode')){ const a=document.querySelector('.pnav button.active'); if(a) a.click(); } }
+    const d=payload.new&&payload.new.data; if(d && (d.updatedAt||0)>(store.updatedAt||0)){ useRemote(d); render(); if(document.body.classList.contains('pmode')){ const a=document.querySelector('.pnav button.active'); if(a) a.click(); } }
   }).subscribe();
 }
 function showLogin(v){ document.getElementById('login').classList.toggle('show',v); }
