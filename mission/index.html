@@ -270,7 +270,7 @@ canvas#confetti{position:fixed; inset:0; pointer-events:none; z-index:9}
         <h3>この1しゅうかん</h3>
         <div class="days" id="days"></div>
       </div>
-      <div class="small" style="text-align:center;margin-top:16px;opacity:.6">v15</div>
+      <div class="small" style="text-align:center;margin-top:16px;opacity:.6">v16</div>
     </div>
 
     <div id="giftView" style="display:none">
@@ -391,6 +391,7 @@ function cloudSave(){
       .then(r=>{ if(r&&r.error) throw r.error; lastRemoteAt=at; setCloud('ok'); }).catch(e=>{ console.warn('cloud save failed',e); setCloud('err'); }); },600);
 }
 function isEmptyStore(st){ return !st || !st.kids || !st.k || Object.values(st.k).every(d=>!d.points && !(d.log||[]).length && !Object.keys(d.days||{}).length); }
+function hasHistory(st){ return !!(st&&st.k&&Object.values(st.k).some(d=>(d.log||[]).length)); }
 function totalPts(st){ return st&&st.k ? Object.values(st.k).reduce((a,d)=>a+(d.points||0),0) : 0; }
 function useRemote(remote){ store=normalize(JSON.parse(JSON.stringify(remote))); try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} lastRemoteAt=remote.updatedAt||0; }
 async function cloudLoad(){
@@ -398,7 +399,8 @@ async function cloudLoad(){
   if(error){ console.warn(error); setCloud('err'); return; }
   const remote = data && data.data;
   if(remote && !isEmptyStore(remote)){
-    if(isEmptyStore(store) || JSON.stringify(store)===JSON.stringify(remote)){ useRemote(remote); }
+    if(isEmptyStore(store) || !hasHistory(store) || JSON.stringify(store)===JSON.stringify(remote)){ useRemote(remote); }
+    else if(!hasHistory(remote)){ cloudSave(); }
     else {
       // both sides have data: ask which to keep (never overwrite silently)
       const keepLocal = await dialog(`クラウドにデータがあります（合計 ${totalPts(remote)}pt）。この端末にも別のデータ（合計 ${totalPts(store)}pt）があります。どちらを使いますか？`,{type:'confirm',ok:'この端末のデータ',no:'クラウドのデータ'});
@@ -502,7 +504,7 @@ function dialog(msg, opt={}){
       b.addEventListener('click',()=>{ if(k==='⌫') inp.value=inp.value.slice(0,-1); else if(k==='✓') done(true); else if(inp.value.length<8) inp.value+=k; }); pad.appendChild(b); }); }
     btns.className='mbtns'+(type==='alert'?' one':'');
     document.getElementById('mNo').style.display = type==='alert'?'none':'';
-    document.getElementById('mOk').textContent = opt.ok||'OK';
+    document.getElementById('mOk').textContent = opt.ok||'OK'; document.getElementById('mNo').textContent = opt.no||'やめる';
     m.classList.add('show');
     if(type==='text'||type==='number') setTimeout(()=>inp.focus(),50);
     function done(okv){ m.classList.remove('show'); cleanup(); res(okv ? (type==='confirm'||type==='alert' ? true : inp.value) : null); }
