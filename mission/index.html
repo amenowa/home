@@ -384,13 +384,13 @@ window.addEventListener('load',()=>{ if(!sb){ const m=document.getElementById('l
 function setCloud(st){ const el=document.getElementById('cloud'); if(!el) return; el.style.display=''; el.textContent = st==='ok'?'☁️':st==='err'?'⚠️':'☁️…'; el.title = st==='ok'?'クラウドに保存されています':st==='err'?'クラウド保存に失敗':'同期中'; }
 function cloudSave(){
   if(!sb||!sbUser) return; clearTimeout(cloudTimer); setCloud('busy');
-  cloudTimer=setTimeout(()=>{ const body=JSON.parse(JSON.stringify(store)); const at=body.updatedAt||Date.now();
+  cloudTimer=setTimeout(()=>{ if(!store||!Array.isArray(store.kids)||!store.kids.length){ setCloud('err'); return; } const body=JSON.parse(JSON.stringify(store)); const at=body.updatedAt||Date.now();
     cloudChain=cloudChain.then(()=>sb.from('household_state').upsert({user_id:sbUser.id, data:body, updated_at:new Date(at).toISOString()}))
       .then(r=>{ if(r&&r.error) throw r.error; lastRemoteAt=at; setCloud('ok'); }).catch(e=>{ console.warn('cloud save failed',e); setCloud('err'); }); },600);
 }
 function isEmptyStore(st){ return !st || !st.kids || !st.k || Object.values(st.k).every(d=>!d.points && !(d.log||[]).length && !Object.keys(d.days||{}).length); }
 function totalPts(st){ return st&&st.k ? Object.values(st.k).reduce((a,d)=>a+(d.points||0),0) : 0; }
-function useRemote(remote){ store=JSON.parse(JSON.stringify(remote)); try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} lastRemoteAt=remote.updatedAt||0; }
+function useRemote(remote){ store=normalize(JSON.parse(JSON.stringify(remote))); try{ localStorage.setItem(KEY, JSON.stringify(store)); }catch(e){} lastRemoteAt=remote.updatedAt||0; }
 async function cloudLoad(){
   const {data,error}=await sb.from('household_state').select('data').eq('user_id',sbUser.id).maybeSingle();
   if(error){ console.warn(error); setCloud('err'); return; }
@@ -460,7 +460,7 @@ function renderKids(){
     b.addEventListener('click',()=>{ store.cur=k.id; pickerOpen=false; emoOpenIdx=-1; emoOpenGift=-1; save(); render(); if(document.body.classList.contains('pmode')) document.querySelector('.pnav button.active').click(); }); box.appendChild(b); });
 }
 function render(){
-  renderKids();
+  try{ renderKids(); }catch(e){ console.warn(e); store=normalize(store); renderKids(); }
   const now=new Date();
   dateEl.textContent = `${now.getMonth()+1}がつ${now.getDate()}にち（${'にちげつかすいもくきんど'[now.getDay()]}）`;
   $('#ptsPill').textContent=pts(); $('#ptsBig').textContent=pts();
